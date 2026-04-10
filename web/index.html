@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <title>Anime processor</title>
+    <link rel="stylesheet" href="/web/style.css">
+</head>
+<body>
+    <div class="header">Anime processor v2.5</div>
+
+    <div class="container">
+        <div class="panel left">
+            <h2>Nastavení</h2>
+
+            <div class="card">
+                <form method="post" action="/save">
+                    <label for="scan_folder">Vstupní složka</label>
+                    <input id="scan_folder" name="scan_folder" value="{{ config.scan_folder }}">
+
+                    <label for="output_folder">Výstupní složka</label>
+                    <input id="output_folder" name="output_folder" value="{{ config.output_folder }}">
+
+                    <label for="translator_url">LibreTranslate URL</label>
+                    <input id="translator_url" name="translator_url" value="{{ config.translator_url }}">
+
+                    <label for="interval">Interval (sekundy)</label>
+                    <input id="interval" name="interval" type="number" min="1" value="{{ config.interval }}">
+
+                    <label for="delete_managed_file">Smazat zpracovaný soubor</label>
+                    <select name="delete_managed_file" id="delete_managed_file" class="form-control">
+                        <option value="yes" {% if config.delete_managed_file %}selected{% endif %}>Yes</option>
+                        <option value="no" {% if not config.delete_managed_file %}selected{% endif %}>No</option>
+                    </select>
+
+                    <button type="submit">Uložit nastavení</button>
+                </form>
+
+                <form method="post" action="/start">
+                    <button class="btn-start" type="submit">Spustit smyčku</button>
+                </form>
+
+                <form method="post" action="/stop">
+                    <button class="btn-stop" type="submit">Pozastavit smyčku</button>
+                </form>
+            </div>
+
+            <div class="card">
+                <h2>Stav</h2>
+                <div class="small">
+                    <div>
+                        <span class="badge">
+                            LibreTranslate:
+                            <span id="libretranslate_status">
+                                <span class="status-dot offline"></span>offline
+                            </span>
+                        </span>
+                    </div>
+                    <div><span class="badge">Aktivní krok: <span id="current_step_text">-</span></span></div>
+                    <div><span class="badge">Úspěšně: <span id="success_files">0</span></span></div>
+                    <div><span class="badge">Neúspěšně: <span id="failed_files">0</span></span></div>
+                    <div><span class="badge">Přeložené titulky: <span id="translated_files">0</span></span></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Poslední chyba</h2>
+                <div class="small" id="last_error">Žádná chyba</div>
+            </div>
+        </div>
+
+        <div class="panel middle">
+            <h2>Schéma kroků</h2>
+
+            <div class="steps">
+                <div class="step" id="step-waiting">
+                    <div class="step-title">1. Čekání</div>
+                    <div class="step-desc">
+                        Program čeká před dalším pokusem.<br>
+                        Odpočet: <span class="countdown" id="countdown">0 s</span>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-loading_files">
+                    <div class="step-title">2. Načtení souborů</div>
+                    <div class="step-desc">
+                        Program načte obsah vstupní složky a zjistí, které soubory tam jsou.
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-checking_name">
+                    <div class="step-title">3. Kontrola názvu</div>
+                    <div class="step-desc">
+                        Program ověří, jestli název souboru odpovídá očekávanému vzoru.
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-queue">
+                    <div class="step-title">Fronta souborů ke zpracování</div>
+                    <div class="step-desc">
+                        Seznam souborů, které čekají na zpracování.
+                    </div>
+                    <div class="queue-box" id="queue_box">
+                        <div class="queue-empty">Žádné soubory nečekají.</div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-copying">
+                    <div class="step-title">4. Kopírování souboru</div>
+                    <div class="step-desc">
+                        Program kopíruje aktuální soubor do správné cílové složky.
+                        <span class="current-file" id="current_file_copy">-</span>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-exporting_subtitles">
+                    <div class="step-title">5. Export titulků</div>
+                    <div class="step-desc">
+                        Program exportuje ASS titulky z aktuálního videa do souboru <strong>.en.ass</strong>.
+                        <span class="current-file" id="current_file_export">-</span>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-translating">
+                    <div class="step-title">6. Překlad Dialogue řádků</div>
+                    <div class="step-desc">
+                        Program překládá Dialogue řádky přes LibreTranslate.
+                        <span class="current-file" id="current_file_translate">-</span>
+                        <div class="progress-row" id="translation_progress_row">
+                            <div class="progress-meta">
+                                <span id="translation_progress_text">0%</span>
+                                <span id="translation_progress_count">0 / 0</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="translation_progress_fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-saving_subtitles">
+                    <div class="step-title">7. Uložení .cze.ass</div>
+                    <div class="step-desc">
+                        Program ukládá přeložené titulky k právě zpracovanému souboru.
+                        <span class="current-file" id="current_file_save">-</span>
+                    </div>
+                </div>
+
+                <div class="arrow">↓</div>
+
+                <div class="step" id="step-evaluating">
+                    <div class="step-title">8. Vyhodnocení</div>
+                    <div class="step-desc">
+                        Program zobrazí výsledky celého cyklu.
+                    </div>
+                </div>
+                  <br>
+                <div class="step" id="step-error">
+                    <div class="step-title">9. Chyba</div>
+                    <div class="step-desc">
+                        Pokud nastane problém, zobrazí se chyba a cyklus se později zkusí znovu.
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel right">
+            <h2>Výstup / konzole</h2>
+            <div class="console" id="console"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentRemaining = 0;
+
+        function stepLabel(step) {
+            const labels = {
+                waiting: "čekání",
+                loading_files: "načtení souborů",
+                checking_name: "kontrola názvu",
+                copying: "kopírování souboru",
+                exporting_subtitles: "export titulků",
+                translating: "překlad dialogue řádků",
+                saving_subtitles: "uložení .cze.ass",
+                evaluating: "vyhodnocení",
+                error: "chyba"
+            };
+            return labels[step] || step;
+        }
+
+        function clearActiveSteps() {
+            document.querySelectorAll(".step").forEach(el => {
+                el.classList.remove("active");
+                el.classList.remove("error");
+            });
+        }
+
+        function activateStep(step) {
+            clearActiveSteps();
+            const el = document.getElementById("step-" + step);
+            if (el) {
+                el.classList.add("active");
+                if (step === "error") {
+                    el.classList.add("error");
+                }
+            }
+        }
+
+        function updateCountdown() {
+            const countdown = document.getElementById("countdown");
+            if (!countdown) return;
+
+            const activeStep = document.getElementById("step-waiting");
+            const isWaitingActive = activeStep && activeStep.classList.contains("active");
+
+            if (!isWaitingActive) {
+                countdown.textContent = "-";
+                return;
+            }
+
+            if (currentRemaining > 0) {
+                countdown.textContent = currentRemaining + " s";
+                currentRemaining--;
+            } else {
+                countdown.textContent = "0 s";
+            }
+        }
+
+        function renderQueue(queueFiles, activeQueueFile) {
+            const queueBox = document.getElementById("queue_box");
+            if (!queueBox) return;
+
+            queueBox.innerHTML = "";
+
+            if (!queueFiles || queueFiles.length === 0) {
+                const empty = document.createElement("div");
+                empty.className = "queue-empty";
+                empty.textContent = "Žádné soubory nečekají.";
+                queueBox.appendChild(empty);
+                return;
+            }
+
+            queueFiles.forEach(file => {
+                const item = document.createElement("div");
+                item.className = "queue-item";
+                if (file === activeQueueFile) {
+                    item.classList.add("active");
+                }
+                item.textContent = file;
+                queueBox.appendChild(item);
+            });
+        }
+
+        function updateCurrentFileViews(currentStep, currentFile) {
+            const map = {
+                copying: "current_file_copy",
+                exporting_subtitles: "current_file_export",
+                translating: "current_file_translate",
+                saving_subtitles: "current_file_save"
+            };
+
+            Object.entries(map).forEach(([step, id]) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+
+                if (step === currentStep && currentFile) {
+                    el.textContent = currentFile;
+                    el.classList.add("visible");
+                } else {
+                    el.textContent = "-";
+                    el.classList.remove("visible");
+                }
+            });
+        }
+
+        function updateTranslationProgress(currentStep, progress, done, total) {
+            const row = document.getElementById("translation_progress_row");
+            const text = document.getElementById("translation_progress_text");
+            const count = document.getElementById("translation_progress_count");
+            const fill = document.getElementById("translation_progress_fill");
+
+            if (!row || !text || !count || !fill) return;
+
+            const safeProgress = Number.isFinite(progress) ? Math.max(0, Math.min(100, progress)) : 0;
+            const safeDone = Number.isFinite(done) ? done : 0;
+            const safeTotal = Number.isFinite(total) ? total : 0;
+
+            if (currentStep === "translating") {
+                row.classList.add("visible");
+                text.textContent = safeProgress + "%";
+                count.textContent = safeDone + " / " + safeTotal;
+                fill.style.width = safeProgress + "%";
+            } else {
+                row.classList.remove("visible");
+                text.textContent = "0%";
+                count.textContent = "0 / 0";
+                fill.style.width = "0%";
+            }
+        }
+
+        function updateLibreTranslateStatus(isOnline) {
+            const el = document.getElementById("libretranslate_status");
+            if (!el) return;
+
+            if (isOnline) {
+                el.innerHTML = '<span class="status-dot online"></span>online';
+            } else {
+                el.innerHTML = '<span class="status-dot offline"></span>offline';
+            }
+        }
+
+        async function loadStatus() {
+            try {
+                const response = await fetch("/status");
+                const data = await response.json();
+
+                const state = data.state || {};
+
+                const currentStepText = document.getElementById("current_step_text");
+                const successFiles = document.getElementById("success_files");
+                const failedFiles = document.getElementById("failed_files");
+                const translatedFiles = document.getElementById("translated_files");
+                const lastError = document.getElementById("last_error");
+
+                if (currentStepText) currentStepText.textContent = stepLabel(state.current_step);
+                if (successFiles) successFiles.textContent = state.success_files ?? 0;
+                if (failedFiles) failedFiles.textContent = state.failed_files ?? 0;
+                if (translatedFiles) translatedFiles.textContent = state.translated_files ?? 0;
+                if (lastError) lastError.textContent = state.last_error || "Žádná chyba";
+
+                updateLibreTranslateStatus(!!state.libretranslate_online);
+
+                activateStep(state.current_step || "waiting");
+                renderQueue(state.queue_files || [], state.active_queue_file || "");
+                updateCurrentFileViews(state.current_step || "", state.current_file || "");
+                updateTranslationProgress(
+                    state.current_step || "",
+                    Number(state.translation_progress ?? 0),
+                    Number(state.translation_done ?? 0),
+                    Number(state.translation_total ?? 0)
+                );
+
+                currentRemaining = state.remaining_seconds ?? 0;
+
+                const countdown = document.getElementById("countdown");
+                if (countdown && state.current_step !== "waiting") {
+                    countdown.textContent = "-";
+                }
+
+                const consoleBox = document.getElementById("console");
+                if (consoleBox) {
+                    const newText = (data.log || []).join("\n");
+                    const wasNearBottom =
+                        consoleBox.scrollTop + consoleBox.clientHeight >= consoleBox.scrollHeight - 30;
+
+                    consoleBox.textContent = newText;
+
+                    if (wasNearBottom) {
+                        consoleBox.scrollTop = consoleBox.scrollHeight;
+                    }
+                }
+            } catch (err) {
+                console.error("Chyba načtení statusu:", err);
+            }
+        }
+
+        loadStatus();
+        setInterval(loadStatus, 1000);
+        setInterval(updateCountdown, 1000);
+    </script>
+</body>
+<style>
+    * {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0f1115;
+    color: #e8e8e8;
+}
+
+.header {
+    padding: 16px 20px;
+    background: #181c23;
+    border-bottom: 1px solid #2a2f38;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 360px 1fr 470px;
+    height: calc(100vh - 60px);
+}
+
+.panel {
+    padding: 20px;
+    overflow: auto;
+    border-right: 1px solid #2a2f38;
+}
+
+.panel:last-child {
+    border-right: none;
+}
+
+.left {
+    background: #151922;
+}
+
+.middle {
+    background: #10141b;
+}
+
+.right {
+    background: #0b0f14;
+}
+
+h2 {
+    margin-top: 0;
+    font-size: 20px;
+}
+
+.card {
+    background: #1a1f29;
+    border: 1px solid #2e3644;
+    border-radius: 12px;
+    padding: 14px;
+    margin-bottom: 16px;
+}
+
+label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: bold;
+}
+
+input,
+select,
+.form-control {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 14px;
+    border-radius: 8px;
+    border: 1px solid #3b4657;
+    background: #0f141c;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+}
+
+select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    cursor: pointer;
+    background-image:
+        linear-gradient(45deg, transparent 50%, #9fb3c8 50%),
+        linear-gradient(135deg, #9fb3c8 50%, transparent 50%);
+    background-position:
+        calc(100% - 18px) calc(50% - 3px),
+        calc(100% - 12px) calc(50% - 3px);
+    background-size: 6px 6px, 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 38px;
+}
+
+input:focus,
+select:focus,
+button:focus {
+    border-color: #5d88d8;
+    box-shadow: 0 0 0 2px rgba(93, 136, 216, 0.15);
+}
+
+button {
+    width: 100%;
+    padding: 11px;
+    margin-bottom: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #2d6cdf;
+    color: white;
+    cursor: pointer;
+    font-weight: bold;
+    transition: 0.2s ease;
+}
+
+button:hover {
+    filter: brightness(1.08);
+}
+
+.btn-stop {
+    background: #b33a3a;
+}
+
+.btn-start {
+    background: #2a9d55;
+}
+
+.steps {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.step {
+    border: 2px solid #394354;
+    border-radius: 14px;
+    padding: 16px;
+    background: #171d27;
+    transition: 0.2s ease;
+}
+
+.step-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+.step-desc {
+    color: #bfc7d5;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.active {
+    border-color: #2ecc71;
+    box-shadow: 0 0 0 2px rgba(46, 204, 113, 0.15);
+    background: #13261b;
+}
+
+.error {
+    border-color: #ff5c5c;
+    background: #2a1717;
+}
+
+.arrow {
+    text-align: center;
+    color: #7b879a;
+    font-size: 24px;
+    font-weight: bold;
+}
+
+.console {
+    background: #05080c;
+    border: 1px solid #26303d;
+    border-radius: 12px;
+    padding: 14px;
+    height: calc(100vh - 140px);
+    overflow: auto;
+    font-family: Consolas, monospace;
+    font-size: 13px;
+    white-space: pre-wrap;
+    color: #7CFC8A;
+}
+
+.small {
+    color: #adb7c7;
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+.badge {
+    display: inline-block;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: #243041;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    word-break: break-all;
+}
+
+.countdown {
+    font-weight: bold;
+    color: #7CFC8A;
+}
+
+.queue-box {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.queue-item {
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #111821;
+    border: 1px solid #2f3b4d;
+    font-size: 13px;
+    word-break: break-word;
+    color: #c7d2e1;
+}
+
+.queue-item.active {
+    background: #173421;
+    border-color: #2ecc71;
+    color: #d9ffe7;
+    box-shadow: 0 0 0 1px rgba(46, 204, 113, 0.2);
+}
+
+.queue-empty {
+    color: #8f9db0;
+    font-style: italic;
+    font-size: 13px;
+}
+
+.current-file {
+    display: none;
+    margin-top: 8px;
+    color: #7CFC8A;
+    font-weight: bold;
+    word-break: break-word;
+}
+
+.current-file.visible {
+    display: block;
+}
+
+.progress-row {
+    display: none;
+    margin-top: 10px;
+}
+
+.progress-row.visible {
+    display: block;
+}
+
+.progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 6px;
+    font-size: 13px;
+    color: #d9ffe7;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 12px;
+    background: #0f141c;
+    border: 1px solid #304055;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #2ecc71, #66e0a3);
+    transition: width 0.2s ease;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.status-dot.online {
+    background: #2ecc71;
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.7);
+}
+
+.status-dot.offline {
+    background: #ff5c5c;
+    box-shadow: 0 0 8px rgba(255, 92, 92, 0.7);
+}
+</style>
+</html>
