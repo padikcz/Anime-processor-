@@ -1,0 +1,37 @@
+name: mini-anime-processor
+
+services:
+  mini-anime-processor:
+    image: padikcz/mini-anime-processor:latest
+    container_name: mini-anime-processor
+    ports:
+      - "5001:5001"
+    restart: unless-stopped
+    volumes:
+      - /DATA/Media/anime-in:/media/in
+      - /DATA/AppData/mini-anime-processor/output:/media/out
+    environment:
+      - TZ=Europe/Prague
+      - SCAN_FOLDER=/media/in
+      - OUTPUT_FOLDER=/media/out
+      - SCAN_INTERVAL=60
+      - TRANSLATOR_URL=http://192.168.50.235:5000
+      - TRANSLATE_SUBTITLES=true
+      - SUBTITLE_STREAM_INDEX=0
+
+x-casaos:
+  architectures:
+    - amd64
+  main: mini-anime-processor
+  author: BAli1
+  category: Media
+  developer: BAli1
+  icon: ""
+  index: /
+  port_map: "5001"
+  title:
+    en_us: Mini Anime Processor
+  tagline:
+    en_us: Anime subtitle processor
+  description:
+    en_us: Scan anime files, export EN subtitles and translate them through LibreTranslate.
