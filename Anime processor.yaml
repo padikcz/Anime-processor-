@@ -1,0 +1,41 @@
+name: refreshing_elina
+services:
+  main_app:
+    cpu_shares: 50
+    command: []
+    container_name: anime-processor
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+    hostname: anime-processor
+    image: padikcz/mini-anime-processor:latest
+    ports:
+      - target: 5001
+        published: "5001"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/Downloads/sp
+        target: /media/in
+      - type: bind
+        source: /mnt/Storage1/jellyfin
+        target: /media/out
+    devices: []
+    cap_add: []
+    environment: []
+    network_mode: bridge
+    privileged: false
+x-casaos:
+  author: self
+  category: self
+  hostname: ""
+  icon: ""
+  index: /
+  is_uncontrolled: false
+  port_map: "5001"
+  scheme: http
+  store_app_id: refreshing_elina
+  title:
+    custom: Anime processor
