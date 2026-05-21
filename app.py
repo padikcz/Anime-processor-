@@ -16,7 +16,12 @@ from flask import Flask, render_template, request, redirect, url_for, jsonify
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 WEB_DIR = os.path.join(BASE_DIR, "web")
 
-app = Flask(__name__, template_folder=WEB_DIR)
+app = Flask(
+    __name__,
+    template_folder=WEB_DIR,
+    static_folder=WEB_DIR,
+    static_url_path=""
+)
 
 
 def env_to_bool(value, default=True):
@@ -29,7 +34,7 @@ CONFIG = {
     "scan_folder": os.getenv("SCAN_FOLDER", "/media/in"),
     "output_folder": os.getenv("OUTPUT_FOLDER", "/media/out"),
     "interval": int(os.getenv("SCAN_INTERVAL", "60")),
-    "translator_url": os.getenv("TRANSLATOR_URL", "http://192.168.50.46:5000"),
+    "translator_url": os.getenv("TRANSLATOR_URL", "http://192.168.50.3:5000"),
     "translate_subtitles": env_to_bool(os.getenv("TRANSLATE_SUBTITLES", "true"), True),
     "subtitle_stream_index": int(os.getenv("SUBTITLE_STREAM_INDEX", "0")),
     "delete_managed_file": env_to_bool(os.getenv("DELETE_MANAGED_FILE", "yes"), True),
@@ -68,6 +73,16 @@ MATCH_PATTERN = r'^\[SubsPlease\]\s+(.+?)\s+-\s+(\d+(?:\.\d+)?(?:v\d+)?)\s+\(108
 # Např.:
 # [SubsPlease] Dorohedoro (01-12) (1080p) [Batch]
 BATCH_PATTERN = r'^\[SubsPlease\]\s+(.+?)\s+\((\d+)\s*-\s*(\d+)\)\s+\(1080p\)\s+\[(.*?)\](?:\.mkv)?$'
+
+# OVA release fallback
+# Např.:
+# [SubsPlease] Yuukoku no Moriarty - OVA1 (1080p) [C16F94ED].mkv
+OVA_PATTERN = r'^\[SubsPlease\]\s+(.+?)\s+-\s+OVA(\d+)\s+\(1080p\)\s+\[(.*?)\](?:\.mkv)?$'
+
+# Film/speciál fallback, pokud to není běžná epizoda ani OVA
+# Např.:
+# [SubsPlease] Chainsaw Man Movie - Reze-hen (1080p) [0066A2DD].mkv
+SPECIAL_PATTERN = r'^\[SubsPlease\]\s+(.+?)\s+\(1080p\)\s+\[(.*?)\](?:\.mkv)?$'
 
 # Sem si můžeš doplnit přesné názvy pro Plex.
 # "id" je volitelné a může být např. "tmdb-123456" nebo "tvdb-123456"
@@ -116,57 +131,95 @@ def normalize_title_for_plex(title: str) -> str:
 
 def parse_release_name_for_plex(source_filename: str):
     """
-    Převod single-episode SubsPlease releasu na data pro Plex.
+    Převod SubsPlease releasu na data pro Plex.
 
-    Příklady:
-    [SubsPlease] Mato Seihei no Slave S2 - 09 (1080p) [HASH].mkv
-      -> series_name=Mato Seihei no Slave, season=2, episode=9
+    Podporované styly:
+    1) Běžná epizoda:
+       [SubsPlease] Show S2 - 09 (1080p) [HASH].mkv
+       -> Show / Season 02 / Show - s02e09.mkv
 
-    [SubsPlease] Yoroi Shin Den Samurai Troopers - 09 (1080p) [HASH].mkv
-      -> series_name=Yoroi Shin Den Samurai Troopers, season=1, episode=9
+    2) OVA fallback:
+       [SubsPlease] Yuukoku no Moriarty - OVA1 (1080p) [HASH].mkv
+       -> Yuukoku no Moriarty / ova / Yuukoku no Moriarty - ova01.mkv
 
-    [SubsPlease] Mayonaka Heart S6 Tune - 09 (1080p) [HASH].mkv
-      -> series_name=Mayonaka Heart S6 Tune, season=1, episode=9
-         protože S6 není na konci názvu
+    3) Film/speciál fallback:
+       [SubsPlease] Chainsaw Man Movie - Reze-hen (1080p) [HASH].mkv
+       -> Chainsaw Man Movie - Reze-hen / Chainsaw Man Movie - Reze-hen.mkv
     """
     if re.match(BATCH_PATTERN, source_filename, re.IGNORECASE):
         return None
 
+    # 1) Běžná epizoda
     match = re.match(MATCH_PATTERN, source_filename, re.IGNORECASE)
-    if not match:
-        return None
+    if match:
+        raw_series = match.group(1).strip()
+        raw_episode = match.group(2).strip()
+        raw_tag = match.group(3).strip()
 
-    raw_series = match.group(1).strip()
-    raw_episode = match.group(2).strip()
-    raw_tag = match.group(3).strip()
+        if raw_tag.lower() == "batch":
+            return None
 
-    if raw_tag.lower() == "batch":
-        return None
+        episode_match = re.match(r'^(\d+)', raw_episode)
+        if not episode_match:
+            return None
+        episode = int(episode_match.group(1))
 
-    episode_match = re.match(r'^(\d+)', raw_episode)
-    if not episode_match:
-        return None
-    episode = int(episode_match.group(1))
+        season = 1
+        series_name = raw_series
 
-    season = 1
-    series_name = raw_series
+        # Season bereme jen pokud je na konci názvu:
+        # "Show S2" -> season 2
+        # "Mayonaka Heart S6 Tune" -> season 1
+        season_match = re.match(r'^(.*?)(?:\s+S(\d+))$', raw_series, re.IGNORECASE)
+        if season_match:
+            series_name = season_match.group(1).strip()
+            season = int(season_match.group(2))
 
-    # Season bereme jen pokud je na konci názvu:
-    # "Show S2" -> season 2
-    # "Mayonaka Heart S6 Tune" -> season 1
-    season_match = re.match(r'^(.*?)(?:\s+S(\d+))$', raw_series, re.IGNORECASE)
-    if season_match:
-        series_name = season_match.group(1).strip()
-        season = int(season_match.group(2))
+        series_name = normalize_title_for_plex(series_name)
 
-    series_name = normalize_title_for_plex(series_name)
+        return {
+            "type": "episode",
+            "series_name": series_name,
+            "season": season,
+            "episode": episode,
+        }
 
-    return {
-        "series_name": series_name,
-        "season": season,
-        "episode": episode,
-    }
+    # 2) OVA fallback
+    ova_match = re.match(OVA_PATTERN, source_filename, re.IGNORECASE)
+    if ova_match:
+        raw_series = ova_match.group(1).strip()
+        ova_number = int(ova_match.group(2).strip())
+        raw_tag = ova_match.group(3).strip()
 
+        if raw_tag.lower() == "batch":
+            return None
+
+        series_name = normalize_title_for_plex(raw_series)
+
+        return {
+            "type": "ova",
+            "series_name": series_name,
+            "ova_number": ova_number,
+        }
+
+    # 3) Film/speciál fallback
+    special_match = re.match(SPECIAL_PATTERN, source_filename, re.IGNORECASE)
+    if special_match:
+        raw_title = special_match.group(1).strip()
+        raw_tag = special_match.group(2).strip()
+
+        if raw_tag.lower() == "batch":
+            return None
+
+        title = normalize_title_for_plex(raw_title)
+
+        return {
+            "type": "special",
+            "series_name": title,
+            "special_title": title,
+        }
+
+    return None
 
 def get_plex_show_info(parsed: dict):
     base_title = parsed["series_name"]
@@ -200,14 +253,31 @@ def build_target_paths(source_filename: str, output_dir: str):
         return None
 
     plex_info = get_plex_show_info(parsed)
+    release_type = parsed.get("type", "episode")
 
-    target_folder = os.path.join(
-        output_dir,
-        plex_info["folder_name"],
-        f"Season {parsed['season']:02d}"
-    )
+    if release_type == "ova":
+        target_folder = os.path.join(
+            output_dir,
+            plex_info["folder_name"],
+            "ova"
+        )
+        base_filename = f"{plex_info['file_title']} - ova{parsed['ova_number']:02d}"
 
-    base_filename = f"{plex_info['file_title']} - s{parsed['season']:02d}e{parsed['episode']:02d}"
+    elif release_type == "special":
+        target_folder = os.path.join(
+            output_dir,
+            plex_info["folder_name"]
+        )
+        base_filename = plex_info["file_title"]
+
+    else:
+        target_folder = os.path.join(
+            output_dir,
+            plex_info["folder_name"],
+            f"Season {parsed['season']:02d}"
+        )
+        base_filename = f"{plex_info['file_title']} - s{parsed['season']:02d}e{parsed['episode']:02d}"
+
     video_path = os.path.join(target_folder, f"{base_filename}.mkv")
     en_sub_path = os.path.join(target_folder, f"{base_filename}.en.ass")
     cs_sub_path = os.path.join(target_folder, f"{base_filename}.cs.ass")
@@ -221,7 +291,6 @@ def build_target_paths(source_filename: str, output_dir: str):
         "en_sub_path": en_sub_path,
         "cs_sub_path": cs_sub_path,
     }
-
 
 def get_target_video_path(source_filename: str, output_dir: str):
     paths = build_target_paths(source_filename, output_dir)
@@ -499,6 +568,30 @@ def delete_source_file(file_path: str):
         return False
 
 
+def delete_existing_target_files(paths: dict):
+    """Smaže starý cílový soubor a jeho titulky před novým zpracováním."""
+    deleted_any = False
+
+    for file_key in ("video_path", "en_sub_path", "cs_sub_path"):
+        target_path = paths.get(file_key)
+        if not target_path:
+            continue
+
+        try:
+            if os.path.exists(target_path):
+                os.remove(target_path)
+                deleted_any = True
+                add_log(f"🗑️ Smazán starý cílový soubor: {os.path.basename(target_path)}")
+        except Exception as e:
+            add_log(f"❌ Nepodařilo se smazat starý cílový soubor {os.path.basename(target_path)}: {e}")
+            return False
+
+    if deleted_any:
+        add_log("✅ Staré cílové soubory byly odstraněny, pokračuji novým zpracováním")
+
+    return True
+
+
 def process_file(file_path: str, output_dir: str) -> bool:
     filename = os.path.basename(file_path)
 
@@ -525,9 +618,17 @@ def process_file(file_path: str, output_dir: str) -> bool:
     os.makedirs(target_folder, exist_ok=True)
 
     add_log(f"📄 === Zpracovávám soubor: {filename} ===")
-    add_log(f"📺 Plex seriál: {plex_info['folder_name']}")
-    add_log(f"📚 Série: {parsed['season']:02d}")
-    add_log(f"🎞️ Epizoda: {parsed['episode']:02d}")
+    add_log(f"📺 Plex název: {plex_info['folder_name']}")
+
+    if parsed.get("type") == "ova":
+        add_log("📚 Typ: OVA")
+        add_log(f"🎞️ OVA číslo: {parsed['ova_number']:02d}")
+    elif parsed.get("type") == "special":
+        add_log("📚 Typ: film/speciál")
+    else:
+        add_log(f"📚 Série: {parsed['season']:02d}")
+        add_log(f"🎞️ Epizoda: {parsed['episode']:02d}")
+
     add_log(f"📝 Nový název: {new_filename}")
 
     if not is_file_ready(file_path):
@@ -535,13 +636,12 @@ def process_file(file_path: str, output_dir: str) -> bool:
         set_active_file("")
         return False
 
-    if os.path.exists(new_file_path):
-        add_log(f'ℹ️ Cílový soubor už existuje, přeskakuji: "{new_filename}"')
-        if CONFIG["delete_managed_file"]:
-            delete_source_file(file_path)
-        remove_from_queue(filename)
-        set_active_file("")
-        return True
+    if os.path.exists(new_file_path) or os.path.exists(en_sub_path) or os.path.exists(cs_sub_path):
+        add_log(f'♻️ Cílový soubor nebo titulky už existují, přepisuji: "{new_filename}"')
+        if not delete_existing_target_files(paths):
+            remove_from_queue(filename)
+            set_active_file("")
+            return False
 
     add_log("📝 Kopíruji soubor do výstupní složky")
 
@@ -601,6 +701,12 @@ def do_scan():
         add_log("🟢 LibreTranslate je online")
     else:
         add_log("🔴 LibreTranslate je offline")
+        if CONFIG["translate_subtitles"]:
+            STATE["last_error"] = "LibreTranslate je offline, zpracování bylo zastaveno"
+            set_step("error")
+            set_active_file("")
+            add_log("⛔ Zpracování souborů se nespustí, protože TRANSLATOR_URL není dostupná")
+            return
 
     add_log(f"📂 Prohlížím složku: {scan_folder}")
 
@@ -659,8 +765,7 @@ def do_scan():
         target_video_path = get_target_video_path(filename, output_folder)
 
         if target_video_path and os.path.exists(target_video_path):
-            add_log(f'ℹ️ Už existuje v cíli, přeskakuji: "{filename}"')
-            continue
+            add_log(f'♻️ Už existuje v cíli, zařazuji k přepsání: "{filename}"')
 
         matched_files_list.append(filename)
         process_candidates.append(file_path)
