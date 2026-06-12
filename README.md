@@ -1,62 +1,83 @@
+# Anime Processor – zpracování anime
+
 # 🎬 Anime Subtitle Processor for Jellyfin
+
+[](https://github.com/padikcz/Anime-processor-#-anime-subtitle-processor-for-jellyfin)
 
 ## 📖 Popis
 
+[](https://github.com/padikcz/Anime-processor-#-popis)
+
 Tento program slouží k automatickému zpracování titulků pro anime tak, aby byly plně kompatibilní se systémem Jellyfin. Nenačítá ani negeneruje titulky ze zvuku, ale pracuje s již existujícími titulky, které exportuje, přeloží a správně uloží.
 
-Program využívá API služby LibreTranslate pro automatický překlad titulků. Výchozí jazyk překladu je **čeština**. Pro správnou funkčnost je nutné, aby váš LibreTranslate server měl stažený a aktivní český jazykový model.
+Program využívá API služby LibreTranslate pro automatický překlad titulků. Výchozí jazyk překladu je **čeština**. Pro správnou funkčnost je nutné, aby váš LibreTranslate server měl stažený a aktivní český jazykový model.
 
-Ve výchozím nastavení je program navržen tak, aby zpracovával anime releasy ze **SubsPlease**, což ho činí ideálním pro automatizované workflow.
+Ve výchozím nastavení je program navržen tak, aby zpracovával anime releasy ze **SubsPlease**, což ho činí ideálním pro automatizované workflow.
 
-Program obsahuje také přehledné **webové rozhraní (Web UI)**, které umožňuje snadné nastavení, správu a spouštění procesů přímo z prohlížeče.
+Program obsahuje také přehledné **webové rozhraní (Web UI)**, které umožňuje snadné nastavení, správu a spouštění procesů přímo z prohlížeče.
 
----
+## ⚠️ Upozornění
 
-## ⚠️ Upozornění
+[](https://github.com/padikcz/Anime-processor-#%EF%B8%8F-upozorn%C4%9Bn%C3%AD)
 
-- Způsob, jakým získáte anime soubory, je **čistě na vás a na vaší zodpovědnosti**  
-- Program pracuje **pouze se soubory, které mu uživatel poskytne** a nijak neřeší jejich původ  
+- Způsob, jakým získáte anime soubory, je **čistě na vás a na vaší zodpovědnosti**
 
----
+- Program pracuje **pouze se soubory, které mu uživatel poskytne** a nijak neřeší jejich původ
 
 ## ✨ Hlavní funkce
 
-- 📤 Export existujících titulků z anime souborů  
-- 🌍 Automatický překlad do češtiny pomocí LibreTranslate API  
-- ⏱️ Zachování časování a formátu titulků (SRT, ASS)  
-- 🧠 Správné pojmenování podle standardů Jellyfinu  
-- 📁 Automatické uložení do správné složky k videu  
-- 🌐 Web UI pro jednoduché ovládání  
-- 🎌 Optimalizováno pro SubsPlease releasy  
-- ⚡ Zjednodušení správy titulků pro anime knihovny  
+[](https://github.com/padikcz/Anime-processor-#-hlavn%C3%AD-funkce)
 
----
+- 📤 Export existujících titulků z anime souborů
+
+- 🌍 Automatický překlad do češtiny pomocí LibreTranslate API
+
+- ⏱️ Zachování časování a formátu titulků (SRT, ASS)
+
+- 🧠 Správné pojmenování podle standardů Jellyfinu
+
+- 📁 Automatické uložení do správné složky k videu
+
+- 🌐 Web UI pro jednoduché ovládání
+
+- 🎌 Optimalizováno pro SubsPlease releasy
+
+- ⚡ Zjednodušení správy titulků pro anime knihovny
 
 ## ⚙️ Požadavky
 
-- Běžící LibreTranslate server  
-- Stažený český jazyk v LibreTranslate  
-- Anime soubory s existujícími titulky  
-- (Volitelné) Jellyfin server  
+[](https://github.com/padikcz/Anime-processor-#%EF%B8%8F-po%C5%BEadavky)
 
----
+- Běžící LibreTranslate server
+
+- Stažený český jazyk v LibreTranslate
+
+- Anime soubory s existujícími titulky
+
+- (Volitelné) Jellyfin server
 
 ## 🚀 Jak to funguje
 
-1. Program načte anime soubor s titulky  
-2. Exportuje existující titulky  
-3. Přeloží je pomocí LibreTranslate API  
-4. Zachová časování a formát  
-5. Přejmenuje soubor podle standardů Jellyfinu  
-6. Uloží titulky do správné složky  
+[](https://github.com/padikcz/Anime-processor-#-jak-to-funguje)
 
----
+- Program načte anime soubor s titulky
+
+- Exportuje existující titulky
+
+- Přeloží je pomocí LibreTranslate API
+
+- Zachová časování a formát
+
+- Přejmenuje soubor podle standardů Jellyfinu
+
+- Uloží titulky do správné složky
 
 ## 🐳 Docker Setup
 
+[](https://github.com/padikcz/Anime-processor-#-docker-setup)
+
 Program můžeš snadno spustit pomocí Dockeru:
 
-```yaml
 version: "3.9"
 
 services:
@@ -73,20 +94,21 @@ services:
     volumes:
       - /DATA/Downloads/sp:/media/in
       - /mnt/Storage1/jellyfin:/media/out
-```
 
 ### 📂 Složky
 
-- `/media/in` → vstup (např. SubsPlease downloady)  
-- `/media/out` → výstup (např. Jellyfin knihovna)  
+[](https://github.com/padikcz/Anime-processor-#-slo%C5%BEky)
 
----
+- /media/in → vstup (např. SubsPlease downloady)
+
+- /media/out → výstup (např. Jellyfin knihovna)
 
 ## 🧊 CasaOS
 
+[](https://github.com/padikcz/Anime-processor-#-casaos)
+
 Tento projekt je testovaný a provozovaný na CasaOS:
 
-```yaml
 name: refreshing_elina
 services:
   main_app:
@@ -121,28 +143,35 @@ x-casaos:
   store_app_id: refreshing_elina
   title:
     custom: Anime processor
-```
-
----
 
 ## 🖥️ Webové rozhraní
 
+[](https://github.com/padikcz/Anime-processor-#%EF%B8%8F-webov%C3%A9-rozhran%C3%AD)
+
 Po spuštění je dostupné na:
 
-http://localhost:5001
-
----
+[http://localhost:5001](http://localhost:5001/)
 
 ## 📌 Poznámky
 
-- Program **negeneruje titulky ze zvuku (žádný speech-to-text)**  
-- Funguje pouze s již existujícími titulky  
-- Ideální pro automatizované anime knihovny  
+[](https://github.com/padikcz/Anime-processor-#-pozn%C3%A1mky)
 
----
+- Program **negeneruje titulky ze zvuku (žádný speech-to-text)**
+
+- Funguje pouze s již existujícími titulky
+
+- Ideální pro automatizované anime knihovny
 
 ## ❤️ Pro koho je to
 
-- Uživatelé Jellyfinu  
-- Fanoušci anime 🎌  
-- Lidé, co chtějí automatizovat titulky  
+[](https://github.com/padikcz/Anime-processor-#%EF%B8%8F-pro-koho-je-to)
+
+- Uživatelé Jellyfinu
+
+- Fanoušci anime 🎌
+
+- Lidé, co chtějí automatizovat titulky
+
+---
+
+[Přečíst článek na webu](https://padik.eu/anime-processor/)
