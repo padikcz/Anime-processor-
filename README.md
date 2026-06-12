@@ -170,7 +170,7 @@ Po spuštění je dostupné na:
 
 - Fanoušci anime 🎌
 
-- Lidé, co chtějí automatizovat titulky
+- Lidé, co chtějí automatizovat titulkyyyyy
 
 ---
 
