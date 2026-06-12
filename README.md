@@ -1,5 +1,7 @@
 # Anime Processor – zpracování anime
 
+![Anime Processor – zpracování anime](https://padik.eu/wp-content/uploads/2026/05/595940531-60e7046b-40cb-43e3-82ff-1bf835fba909.png)
+
 # 🎬 Anime Subtitle Processor for Jellyfin
 
 [](https://github.com/padikcz/Anime-processor-#-anime-subtitle-processor-for-jellyfin)
